@@ -1,6 +1,8 @@
 package gosc
 
 import (
+	"fmt"
+	"regexp"
 	"sync"
 )
 
@@ -44,15 +46,21 @@ func NewClient(address string) (*Client, error) {
 	return cli, nil
 }
 
-// HandleMessage adds a MessageHandler for messages on a specific address.
-func (c *Client) HandleMessage(address string, handler MessageHandler) {
-	c.messageHandlers[address] = handler
+// HandleMessage adds a MessageHandler for messages on a specific address using
+// regexp matching.
+func (c *Client) HandleMessage(addressPattern string, handler MessageHandler) error {
+	_, err := regexp.Compile(addressPattern)
+	if err != nil {
+		return fmt.Errorf("addressPattern is not a valid regexp string: %v", err)
+	}
+	c.messageHandlers[addressPattern] = handler
+	return nil
 }
 
 // HandleMessageFunc adds a MessageHandlerFunc for messages on a specific
-// address.
-func (c *Client) HandleMessageFunc(address string, handlerFunc MessageHandlerFunc) {
-	c.HandleMessage(address, handlerFunc)
+// address using regexp matching.
+func (c *Client) HandleMessageFunc(addressPattern string, handlerFunc MessageHandlerFunc) error {
+	return c.HandleMessage(addressPattern, handlerFunc)
 }
 
 // HandleMessage calls f(msg)
@@ -111,8 +119,13 @@ func (c *Client) listen() {
 				ch := chi.(chan *Message)
 				ch <- m
 				close(ch)
-			} else if h, ok := c.messageHandlers[m.Address]; ok {
-				h.HandleMessage(m)
+			} else {
+				for pattern, h := range c.messageHandlers {
+					if c.addressMatches(pattern, m.Address) {
+						h.HandleMessage(m)
+						break
+					}
+				}
 			}
 		} else if pkg.GetType() == PackageTypeBundle {
 			if c.bundleHandler != nil {
@@ -121,4 +134,9 @@ func (c *Client) listen() {
 			}
 		}
 	}
+}
+
+func (c *Client) addressMatches(pattern, address string) bool {
+	matches, _ := regexp.MatchString(pattern, address)
+	return matches
 }
