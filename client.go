@@ -2,12 +2,14 @@ package gosc
 
 import (
 	"fmt"
+	"net"
 	"regexp"
 	"sync"
 )
 
 // A Client is an OSC client.
 type Client struct {
+	remote                 net.Addr
 	transport              Transport
 	messageHandlers        map[string]MessageHandler
 	pendingMessageRequests sync.Map
@@ -30,14 +32,21 @@ type BundleHandler interface {
 type MessageHandlerFunc func(msg *Message)
 
 // NewClient returns a default client with UDP transport to the given address.
+// The client will also start a go-routine to listen for data responses.
 //
 // The address must be a valid UDP-address including port number.
 func NewClient(address string) (*Client, error) {
+	remote, err := net.ResolveUDPAddr("udp", address)
+	if err != nil {
+		return nil, err
+	}
 	trans, err := NewUDPTransport(address, 512)
 	if err != nil {
 		return nil, err
 	}
+
 	cli := &Client{
+		remote:          remote,
 		transport:       trans,
 		messageHandlers: map[string]MessageHandler{},
 	}
@@ -57,7 +66,7 @@ func (c *Client) HandleMessage(addressPattern string, handler MessageHandler) er
 	return nil
 }
 
-// HandleMessageFunc adds a MessageHandlerFunc for messages on a specific
+// HandlerFunc adds a MessageHandlerFunc for messages on a specific
 // address using regexp matching.
 func (c *Client) HandleMessageFunc(addressPattern string, handlerFunc MessageHandlerFunc) error {
 	return c.HandleMessage(addressPattern, handlerFunc)
@@ -70,16 +79,16 @@ func (f MessageHandlerFunc) HandleMessage(msg *Message) {
 
 // SendMessage uses the clients transport to encode and send an OSC Message
 func (c *Client) SendMessage(msg *Message) error {
-	return c.transport.Send(msg)
+	return c.transport.Send(msg, c.remote)
 }
 
 // SendBundle uses the clients transport to encode and send an OSC Bundle
 func (c *Client) SendBundle(bun *Bundle) error {
-	return c.transport.Send(bun)
+	return c.transport.Send(bun, c.remote)
 }
 
 // SendAndReceiveMessage sends the OSC Message using the clients transport and
-// then waits for the response.
+// then waits (blocking) for the response to arrive on the listener.
 func (c *Client) SendAndReceiveMessage(msg *Message) (*Message, error) {
 	ch := make(chan *Message)
 	c.pendingMessageRequests.Store(msg.Address, ch)
@@ -101,7 +110,7 @@ func (c *Client) EmitMessage(address string, varArg ...any) error {
 }
 
 // CallMessage creates an OSC Message using the provided data and then sends
-// it.
+// it. See SendAndReceiveMessage
 func (c *Client) CallMessage(address string, varArg ...any) (*Message, error) {
 	return c.SendAndReceiveMessage(&Message{
 		Address:   address,
@@ -112,7 +121,7 @@ func (c *Client) CallMessage(address string, varArg ...any) (*Message, error) {
 func (c *Client) listen() {
 	var pkg Package
 	var err error
-	for pkg, err = c.transport.Receive(); err == nil; pkg, err = c.transport.Receive() {
+	for pkg, _, err = c.transport.Receive(); err == nil; pkg, _, err = c.transport.Receive() {
 		if pkg.GetType() == PackageTypeMessage {
 			m := pkg.(*Message)
 			if chi, ok := c.pendingMessageRequests.LoadAndDelete(m.Address); ok {

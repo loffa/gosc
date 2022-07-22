@@ -1,6 +1,9 @@
 package gosc
 
-import "time"
+import (
+	"fmt"
+	"time"
+)
 
 // PackageType is used to create comparable constants.
 type PackageType string
@@ -32,6 +35,10 @@ type Message struct {
 // GetType returns the package type for Messages
 func (m *Message) GetType() PackageType {
 	return PackageTypeMessage
+}
+
+func (m *Message) String() string {
+	return fmt.Sprintf("%s: %v", m.Address, m.Arguments)
 }
 
 // Timetag represents the time since 1900-01-01 00:00.
