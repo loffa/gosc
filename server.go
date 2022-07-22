@@ -2,11 +2,24 @@ package gosc
 
 import "net"
 
+// Handler provides an interface dealing with any OSC package
+type Handler interface {
+	ServePackage(writer *ResponseWriter, pkg Package)
+}
+
+// HandlerFunc type is an adapter to allow the use of ordinary functions as
+// Handlers.
+type HandlerFunc func(responseWriter *ResponseWriter, pkg Package)
+
+func (h HandlerFunc) ServePackage(writer *ResponseWriter, pkg Package) {
+	h(writer, pkg)
+}
+
 // A Server defines needed options for running an OSC Server.
 type Server struct {
 	opts           *ServerOptions
 	transport      Transport
-	messageHandler Mux
+	messageHandler Handler
 	exiting        chan bool
 }
 
@@ -29,11 +42,11 @@ func NewServer(opts *ServerOptions) *Server {
 	}
 }
 
-// ListenAndServe listens on the UDP address specified and then calls handlers
+// ListenAndServe listens on the UDP address specified and then calls messageHandlers
 // for incoming packages using the Mux.
 //
 // ListenAndServe returns error if the address is malformed or can't be opened.
-func (s *Server) ListenAndServe(addr string, handler Mux) error {
+func (s *Server) ListenAndServe(addr string, handler Handler) error {
 	trans, err := NewUDPListen(addr, s.opts.BufferSize)
 	if err != nil {
 		return err
@@ -57,12 +70,10 @@ func (s *Server) listen() {
 	var err error
 	var src net.Addr
 	for pkg, src, err = s.transport.Receive(); err == nil; pkg, src, err = s.transport.Receive() {
-		if pkg.GetType() == PackageTypeMessage {
-			m := pkg.(*Message)
-			s.messageHandler.HandleMessage(src, s.transport, m)
-		} else if pkg.GetType() == PackageTypeBundle {
-			b := pkg.(*Bundle)
-			s.messageHandler.HandleBundle(src, b)
+		rw := &ResponseWriter{
+			src:   src,
+			trans: s.transport,
 		}
+		s.messageHandler.ServePackage(rw, pkg)
 	}
 }

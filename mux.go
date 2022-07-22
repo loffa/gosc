@@ -2,53 +2,40 @@ package gosc
 
 import "net"
 
-// Mux is an interface used to multiplex requests to the server.
-type Mux interface {
-	HandleMessage(src net.Addr, t Transport, message *Message)
-	HandleBundle(src net.Addr, bundle *Bundle)
+// Mux is the default multiplex handler for messages and bundles. Returned by NewMux.
+type Mux struct {
+	bundleHandler   BundleHandler
+	messageHandlers map[string]MessageHandler
 }
 
-// DefaultMux is the default multiplexer for messages. Returned by NewMux.
-type DefaultMux struct {
-	bundleHandler BundleHandler
-	handlers      map[string]HandlerFunc
+func (m *Mux) ServePackage(writer *ResponseWriter, pkg Package) {
+	switch x := pkg.(type) {
+	case *Message:
+		if handler, ok := m.messageHandlers[x.Address]; ok {
+			handler.HandleMessage(writer, x)
+		}
+	case *Bundle:
+		if m.bundleHandler != nil {
+			m.bundleHandler.HandleBundle(writer, x)
+		}
+	}
 }
 
-// HandlerFunc type is an adapter to allow the use of ordinary functions as
-// Handlers.
-type HandlerFunc func(message *Message, responseWriter *ResponseWriter)
+func (m *Mux) HandleMessage(addr string, handler MessageHandler) {
+	m.messageHandlers[addr] = handler
+}
 
-// NewMux returns the DefaultMux. The bundleHandler can be nil if not handling
+func (m *Mux) HandleMessageFunc(addr string, handlerFunc MessageHandlerFunc) {
+	m.messageHandlers[addr] = handlerFunc
+}
+
+// NewMux returns the Mux. The bundleHandler can be nil if not handling
 // bundles.
-func NewMux(bundleHandler BundleHandler) *DefaultMux {
-	return &DefaultMux{
-		bundleHandler: bundleHandler,
-		handlers:      make(map[string]HandlerFunc),
+func NewMux(bundleHandler BundleHandler) *Mux {
+	return &Mux{
+		bundleHandler:   bundleHandler,
+		messageHandlers: make(map[string]MessageHandler),
 	}
-}
-
-// HandleMessage satisfies the Mux interface for DefaultMux
-func (m *DefaultMux) HandleMessage(src net.Addr, t Transport, message *Message) {
-	handler, ok := m.handlers[message.Address]
-	if ok {
-		handler(message, &ResponseWriter{
-			src:   src,
-			trans: t,
-		})
-	}
-}
-
-// HandleBundle satisfies the Mux interface for DefaultMux
-func (m *DefaultMux) HandleBundle(_ net.Addr, bundle *Bundle) {
-	if m.bundleHandler != nil {
-		m.bundleHandler.HandleBundle(bundle)
-	}
-}
-
-// Handle adds a HandlerFunc to the Mux so that incoming messages on the address
-// is dispatched.
-func (m *DefaultMux) Handle(address string, handler HandlerFunc) {
-	m.handlers[address] = handler
 }
 
 // ResponseWriter is used to send responses back to the requesting client on the

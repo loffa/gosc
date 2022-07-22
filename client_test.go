@@ -8,7 +8,7 @@ type testMessageHandler struct {
 	handled bool
 }
 
-func (t *testMessageHandler) HandleMessage(_ *Message) {
+func (t *testMessageHandler) HandleMessage(_ *ResponseWriter, _ *Message) {
 	t.handled = true
 }
 
@@ -16,7 +16,7 @@ type testBundleHandler struct {
 	handled bool
 }
 
-func (t *testBundleHandler) HandleBundle(_ *Bundle) {
+func (t *testBundleHandler) HandleBundle(_ *ResponseWriter, _ *Bundle) {
 	t.handled = true
 }
 
@@ -50,7 +50,7 @@ func TestClient_HandleMessage(t *testing.T) {
 
 func TestClient_HandleMessageFunc(t *testing.T) {
 	cli, _ := NewClient("127.0.0.1:1234")
-	err := cli.HandleMessageFunc("/test", func(msg *Message) {})
+	err := cli.HandleMessageFunc("/test", func(_ *ResponseWriter, msg *Message) {})
 	if err != nil {
 		t.Errorf("expected no error but got: %v", err)
 	}
@@ -84,10 +84,10 @@ func TestClient_listen(t *testing.T) {
 
 func TestMessageHandlerFunc_HandleMessage(t *testing.T) {
 	calledFunction := false
-	mh := func(msg *Message) {
+	mh := func(_ *ResponseWriter, msg *Message) {
 		calledFunction = true
 	}
-	MessageHandlerFunc(mh).HandleMessage(&Message{
+	MessageHandlerFunc(mh).HandleMessage(nil, &Message{
 		Address:   "/test",
 		Arguments: []any{},
 	})
@@ -103,7 +103,7 @@ func TestNewClient(t *testing.T) {
 			t.Errorf("expected no error but got: %v", err)
 		}
 		if cli.messageHandlers == nil {
-			t.Errorf("expected client message handlers to be initialized.")
+			t.Errorf("expected client message messageHandlers to be initialized.")
 		}
 	})
 	t.Run("wrongAddress", func(t *testing.T) {

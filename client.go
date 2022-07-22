@@ -18,18 +18,18 @@ type Client struct {
 
 // A MessageHandler is called when messages on the specified address is received.
 type MessageHandler interface {
-	HandleMessage(msg *Message)
+	HandleMessage(writer *ResponseWriter, msg *Message)
 }
 
 // A BundleHandler is called when a Bundle is received.
 type BundleHandler interface {
-	HandleBundle(bundle *Bundle)
+	HandleBundle(writer *ResponseWriter, bundle *Bundle)
 }
 
 // The MessageHandlerFunc type is an adapter to allow the use of ordinary
 // functions as MessageHandler:s. If f is a function with the appropriate
 // signature, MessageHandlerFunc(f) is a MessageHandler that calls f.
-type MessageHandlerFunc func(msg *Message)
+type MessageHandlerFunc func(writer *ResponseWriter, msg *Message)
 
 // NewClient returns a default client with UDP transport to the given address.
 // The client will also start a go-routine to listen for data responses.
@@ -66,15 +66,15 @@ func (c *Client) HandleMessage(addressPattern string, handler MessageHandler) er
 	return nil
 }
 
-// HandlerFunc adds a MessageHandlerFunc for messages on a specific
+// HandleMessageFunc adds a MessageHandlerFunc for messages on a specific
 // address using regexp matching.
 func (c *Client) HandleMessageFunc(addressPattern string, handlerFunc MessageHandlerFunc) error {
 	return c.HandleMessage(addressPattern, handlerFunc)
 }
 
 // HandleMessage calls f(msg)
-func (f MessageHandlerFunc) HandleMessage(msg *Message) {
-	f(msg)
+func (m MessageHandlerFunc) HandleMessage(w *ResponseWriter, msg *Message) {
+	m(w, msg)
 }
 
 // SendMessage uses the clients transport to encode and send an OSC Message
@@ -131,7 +131,7 @@ func (c *Client) listen() {
 			} else {
 				for pattern, h := range c.messageHandlers {
 					if c.addressMatches(pattern, m.Address) {
-						h.HandleMessage(m)
+						h.HandleMessage(nil, m)
 						break
 					}
 				}
@@ -139,7 +139,7 @@ func (c *Client) listen() {
 		} else if pkg.GetType() == PackageTypeBundle {
 			if c.bundleHandler != nil {
 				b := pkg.(*Bundle)
-				c.bundleHandler.HandleBundle(b)
+				c.bundleHandler.HandleBundle(nil, b)
 			}
 		}
 	}
