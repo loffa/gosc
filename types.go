@@ -1,6 +1,9 @@
 package gosc
 
-import "time"
+import (
+	"fmt"
+	"time"
+)
 
 // PackageType is used to create comparable constants.
 type PackageType string
@@ -34,6 +37,10 @@ func (m *Message) GetType() PackageType {
 	return PackageTypeMessage
 }
 
+func (m *Message) String() string {
+	return fmt.Sprintf("%s: %v", m.Address, m.Arguments)
+}
+
 // Timetag represents the time since 1900-01-01 00:00.
 type Timetag uint64
 
@@ -42,9 +49,9 @@ type Bundle struct {
 	// Timetag for execution of the messages in this Bundle
 	Timetag Timetag
 	// List of messages to execute at Timetag. Messages are expected to be
-	// handled atomically.
+	// received atomically.
 	Messages []*Message
-	// Bundles can contain bundles, bundles in budles are not handled
+	// Bundles can contain bundles, bundles in budles are not received
 	// atomically.
 	Bundles []*Bundle
 	// Name is the name of the packet after the '#' when encoding. If omitted

@@ -73,10 +73,7 @@ func writeArguments(w *bufio.Writer, arguments []any) error {
 	buf := bytes.Buffer{}
 	bufWriter := bufio.NewWriter(&buf)
 	ttString := strings.Builder{}
-	_, err := ttString.WriteRune(',')
-	if err != nil {
-		return err
-	}
+	_, _ = ttString.WriteRune(',')
 
 	for _, a := range arguments {
 		typ := reflect.TypeOf(a)
@@ -91,7 +88,7 @@ func writeArguments(w *bufio.Writer, arguments []any) error {
 		}
 	}
 
-	err = writePaddedString(w, ttString.String())
+	err := writePaddedString(w, ttString.String())
 	if err != nil {
 		return err
 	}
