@@ -2,84 +2,91 @@ package gosc
 
 import (
 	"fmt"
+	"net"
 	"regexp"
 	"sync"
 )
 
 // A Client is an OSC client.
 type Client struct {
+	remote                 net.Addr
 	transport              Transport
-	messageHandlers        map[string]MessageHandler
+	messageReceivers       map[string]MessageReceiver
 	pendingMessageRequests sync.Map
-	bundleHandler          BundleHandler
+	bundleReceiver         BundleReceiver
 }
 
-// A MessageHandler is called when messages on the specified address is received.
-type MessageHandler interface {
-	HandleMessage(msg *Message)
+type BundleReceiver interface {
+	ReceiveBundle(bundle *Bundle)
 }
 
-// A BundleHandler is called when a Bundle is received.
-type BundleHandler interface {
-	HandleBundle(bundle *Bundle)
+type MessageReceiver interface {
+	ReceiveMessage(msg *Message)
 }
 
-// The MessageHandlerFunc type is an adapter to allow the use of ordinary
-// functions as MessageHandler:s. If f is a function with the appropriate
-// signature, MessageHandlerFunc(f) is a MessageHandler that calls f.
-type MessageHandlerFunc func(msg *Message)
+// MessageReceiverFunc type is an adapter to allow the use of ordinary functions
+// as MessageReceiver:s. If f a function with the appropriate signature,
+// MessageReceiverFunc(f) is a MessageReceiver that calls f.
+type MessageReceiverFunc func(msg *Message)
+
+// ReceiveMessage calls m(msg)
+func (m MessageReceiverFunc) ReceiveMessage(msg *Message) {
+	m(msg)
+}
 
 // NewClient returns a default client with UDP transport to the given address.
+// The client will also start a go-routine to listen for data responses.
 //
 // The address must be a valid UDP-address including port number.
 func NewClient(address string) (*Client, error) {
+	remote, err := net.ResolveUDPAddr("udp", address)
+	if err != nil {
+		return nil, err
+	}
 	trans, err := NewUDPTransport(address, 512)
 	if err != nil {
 		return nil, err
 	}
+
 	cli := &Client{
-		transport:       trans,
-		messageHandlers: map[string]MessageHandler{},
+		remote:           remote,
+		transport:        trans,
+		messageReceivers: map[string]MessageReceiver{},
 	}
 	go cli.listen()
 
 	return cli, nil
 }
 
-// HandleMessage adds a MessageHandler for messages on a specific address using
+// ReceiveMessage adds a MessageHandler for messages on a specific address using
 // regexp matching.
-func (c *Client) HandleMessage(addressPattern string, handler MessageHandler) error {
+func (c *Client) ReceiveMessage(addressPattern string, receiver MessageReceiver) error {
 	_, err := regexp.Compile(addressPattern)
 	if err != nil {
 		return fmt.Errorf("addressPattern is not a valid regexp string: %v", err)
 	}
-	c.messageHandlers[addressPattern] = handler
+	c.messageReceivers[addressPattern] = receiver
 	return nil
 }
 
-// HandleMessageFunc adds a MessageHandlerFunc for messages on a specific
+// ReceiveMessageFunc adds a MessageHandlerFunc for messages on a specific
 // address using regexp matching.
-func (c *Client) HandleMessageFunc(addressPattern string, handlerFunc MessageHandlerFunc) error {
-	return c.HandleMessage(addressPattern, handlerFunc)
-}
-
-// HandleMessage calls f(msg)
-func (f MessageHandlerFunc) HandleMessage(msg *Message) {
-	f(msg)
+func (c *Client) ReceiveMessageFunc(addressPattern string, receiverFunc MessageReceiverFunc) error {
+	return c.ReceiveMessage(addressPattern, receiverFunc)
 }
 
 // SendMessage uses the clients transport to encode and send an OSC Message
 func (c *Client) SendMessage(msg *Message) error {
-	return c.transport.Send(msg)
+	return c.transport.Send(msg, c.remote)
 }
 
 // SendBundle uses the clients transport to encode and send an OSC Bundle
 func (c *Client) SendBundle(bun *Bundle) error {
-	return c.transport.Send(bun)
+	return c.transport.Send(bun, c.remote)
 }
 
 // SendAndReceiveMessage sends the OSC Message using the clients transport and
-// then waits for the response.
+// then waits (blocking) for the response to arrive to the listener.
 func (c *Client) SendAndReceiveMessage(msg *Message) (*Message, error) {
 	ch := make(chan *Message)
 	c.pendingMessageRequests.Store(msg.Address, ch)
@@ -101,7 +108,7 @@ func (c *Client) EmitMessage(address string, varArg ...any) error {
 }
 
 // CallMessage creates an OSC Message using the provided data and then sends
-// it.
+// it. See SendAndReceiveMessage
 func (c *Client) CallMessage(address string, varArg ...any) (*Message, error) {
 	return c.SendAndReceiveMessage(&Message{
 		Address:   address,
@@ -112,7 +119,7 @@ func (c *Client) CallMessage(address string, varArg ...any) (*Message, error) {
 func (c *Client) listen() {
 	var pkg Package
 	var err error
-	for pkg, err = c.transport.Receive(); err == nil; pkg, err = c.transport.Receive() {
+	for pkg, _, err = c.transport.Receive(); err == nil; pkg, _, err = c.transport.Receive() {
 		if pkg.GetType() == PackageTypeMessage {
 			m := pkg.(*Message)
 			if chi, ok := c.pendingMessageRequests.LoadAndDelete(m.Address); ok {
@@ -120,17 +127,17 @@ func (c *Client) listen() {
 				ch <- m
 				close(ch)
 			} else {
-				for pattern, h := range c.messageHandlers {
+				for pattern, h := range c.messageReceivers {
 					if c.addressMatches(pattern, m.Address) {
-						h.HandleMessage(m)
+						h.ReceiveMessage(m)
 						break
 					}
 				}
 			}
 		} else if pkg.GetType() == PackageTypeBundle {
-			if c.bundleHandler != nil {
+			if c.bundleReceiver != nil {
 				b := pkg.(*Bundle)
-				c.bundleHandler.HandleBundle(b)
+				c.bundleReceiver.ReceiveBundle(b)
 			}
 		}
 	}

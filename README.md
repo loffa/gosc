@@ -27,4 +27,6 @@ func main() {
 }
 ```
 
+For more examples please look into the `examples` directory.
+
 [1]: https://ccrma.stanford.edu/groups/osc/spec-1_0.html

@@ -19,16 +19,26 @@ func Test_writePackage(t *testing.T) {
 	t.Run("message", func(t *testing.T) {
 		err := writePackage(&Message{
 			Address:   "/info",
-			Arguments: []any{},
+			Arguments: []any{float32(1.0), "Test", int32(2)},
 		}, w)
 		if err != nil {
 			t.Errorf("expected no error but got: %v", err)
 		}
 	})
 	t.Run("bundle", func(t *testing.T) {
-		err := writePackage(&Bundle{}, w)
-		if err == nil {
-			t.Error("expected error but none given")
+		err := writePackage(&Bundle{
+			Timetag: 0,
+			Messages: []*Message{
+				{
+					Address:   "/info",
+					Arguments: []any{},
+				},
+			},
+			Bundles: []*Bundle{},
+			Name:    "TestName",
+		}, w)
+		if err != nil {
+			t.Errorf("expected no error but got: %v", err)
 		}
 	})
 	t.Run("unknown", func(t *testing.T) {
@@ -64,4 +74,8 @@ func Test_writePaddedString(t *testing.T) {
 	if buf.Len() != 8 {
 		t.Errorf("padded string was %d bytes but expected 8", buf.Len())
 	}
+}
+
+func Test_writePayload(t *testing.T) {
+	// TODO: Implement me
 }

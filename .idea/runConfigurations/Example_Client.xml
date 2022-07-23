@@ -1,0 +1,11 @@
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="Example Client" type="GoApplicationRunConfiguration" factoryName="Go Application">
+    <module name="gosc" />
+    <working_directory value="$PROJECT_DIR$" />
+    <kind value="PACKAGE" />
+    <package value="github.com/loffa/gosc/example/client" />
+    <directory value="$PROJECT_DIR$" />
+    <filePath value="$PROJECT_DIR$/example/client/main.go" />
+    <method v="2" />
+  </configuration>
+</component>
