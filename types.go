@@ -49,9 +49,9 @@ type Bundle struct {
 	// Timetag for execution of the messages in this Bundle
 	Timetag Timetag
 	// List of messages to execute at Timetag. Messages are expected to be
-	// received atomically.
+	// handled atomically.
 	Messages []*Message
-	// Bundles can contain bundles, bundles in budles are not received
+	// Bundles can contain bundles, bundles in bundles are not handled
 	// atomically.
 	Bundles []*Bundle
 	// Name is the name of the packet after the '#' when encoding. If omitted
