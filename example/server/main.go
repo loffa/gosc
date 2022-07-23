@@ -8,6 +8,7 @@ import (
 
 // PrefixMiddleware is a middleware that just adds a prefix to messages address
 // before passing it further down the handler chain
+// nolint:deadcode // Example code is supposed to be dead
 func PrefixMiddleware(prefix string, next gosc.PackageHandler) gosc.PackageHandler {
 	return gosc.HandlerFunc(func(w *gosc.ResponseWriter, pkg gosc.Package) {
 		if msg, ok := pkg.(*gosc.Message); ok {
